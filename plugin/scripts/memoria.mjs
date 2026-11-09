@@ -18,10 +18,11 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 
-const VERSAO = '1.0.0';
+const VERSAO = '1.0.1';
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(AQUI, 'memoria.mjs');
-const KIT = path.resolve(AQUI, '..', 'kit');
+// kit ao lado do script (~/.memoria-ia/kit) ou na pasta do plugin (plugin/kit)
+const KIT = fs.existsSync(path.join(AQUI, 'kit')) ? path.join(AQUI, 'kit') : path.resolve(AQUI, '..', 'kit');
 const ARQ_RETOMADA = 'CONTINUAR_AQUI.md';
 const LIMITE_CONTEXTO = 6000;           // caracteres injetados no inicio da sessao (~1.500 tokens)
 const LIMITE_LINHAS = 80;

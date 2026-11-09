@@ -83,6 +83,12 @@ fs.mkdirSync(path.join(HOME_FAKE, '.memoria-ia'), { recursive: true });
 fs.copyFileSync(SCRIPT, path.join(HOME_FAKE, '.memoria-ia', 'memoria.mjs'));
 r = viaLancador({});
 ok(/Projeto Teste/.test(r.stdout), 'lancador sem PLUGIN_ROOT usa ~/.memoria-ia');
+// copia instalada (~/.memoria-ia/memoria.mjs + ~/.memoria-ia/kit) tambem consegue instalar o kit
+fs.cpSync(path.join(PLUGIN, 'kit'), path.join(HOME_FAKE, '.memoria-ia', 'kit'), { recursive: true });
+const proj2 = path.join(TMP, 'proj2');
+fs.mkdirSync(proj2);
+r = spawnSync(process.execPath, [path.join(HOME_FAKE, '.memoria-ia', 'memoria.mjs'), 'instalar', proj2, 'P2'], { env, encoding: 'utf8' });
+ok(/P2/.test(fs.existsSync(path.join(proj2, 'CONTINUAR_AQUI.md')) ? fs.readFileSync(path.join(proj2, 'CONTINUAR_AQUI.md'), 'utf8') : ''), 'instalar a partir de ~/.memoria-ia acha o kit ao lado');
 ok(JSON.parse(fs.readFileSync(path.join(PLUGIN, 'hooks', 'hooks.json'), 'utf8')).hooks.Stop[0].hooks[0].command.includes('lembrete --ia claude'), 'gancho Stop do Claude configurado');
 
 // ---- lembrete (Stop)

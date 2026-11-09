@@ -22,7 +22,7 @@
 `memoria` = o comando que a memoria-ia mostra no início da sessão (`node ".../memoria.mjs"`).
 
 ## Agora
-- **Estado:** v1.0.0 pronta e testada (41/41). Funciona em Claude Code, Codex 0.166 e Antigravity (Gemini).
+- **Estado:** v1.0.1 pronta e testada (42/42). Funciona em Claude Code, Codex 0.166 e Antigravity (Gemini).
 - **Versão / onde roda:** `plugin/scripts/memoria.mjs` (Node, sem dependências); instalador `instalar.mjs`; repositório github.com/oevetech/memoria-ia.
 - **Como voltar:** git (cada versão é um commit/tag).
 - **Quem está mexendo:** livre.
@@ -47,7 +47,7 @@
 - `node -e` coloca o 1º argumento em `argv[1]`: o script detecta isso.
 
 ## Como trabalhar aqui
-- **Testar:** `node tests/testar.mjs` → precisa "41/41" (ou mais).
+- **Testar:** `node tests/testar.mjs` → precisa "42/42" (ou mais).
 - **Instalar/atualizar na máquina:** `node instalar.mjs` (`--local` usa esta pasta; `--remover` desfaz).
 - **Mapa:** `plugin/scripts/memoria.mjs` comandos e ganchos · `plugin/kit/` modelo do projeto · `plugin/skills/` memoria e passagem · `plugin/hooks*` ganchos (Claude, Codex, Antigravity) · `.claude-plugin/` e `.agents/plugins/` marketplaces.
 
