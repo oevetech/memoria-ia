@@ -2,13 +2,26 @@
   "hooks": {
     "SessionStart": [
       {
-        "matcher": "startup|resume|clear|compact",
+        "matcher": "startup|clear|compact",
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT;let s=r&&p.join(r,'scripts','memoria.mjs');if(!s||!f.existsSync(s))s=p.join(o.homedir(),'.memoria-ia','memoria.mjs');import(u.pathToFileURL(s).href)\" contexto --ia codex",
+            "command": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const h=o.homedir(),r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT,c=process.env.CODEX_HOME||p.join(h,'.codex');const s=[r&&p.join(r,'scripts','memoria.mjs'),p.join(c,'.tmp','marketplaces','memoria-ia','plugin','scripts','memoria.mjs'),p.join(h,'.memoria-ia','memoria.mjs')].find(x=>x&&f.existsSync(x));if(s)import(u.pathToFileURL(s).href);else console.log('{}')\" contexto --ia codex",
             "timeout": 15,
-            "commandWindows": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT;let s=r&&p.join(r,'scripts','memoria.mjs');if(!s||!f.existsSync(s))s=p.join(o.homedir(),'.memoria-ia','memoria.mjs');import(u.pathToFileURL(s).href)\" contexto --ia codex"
+            "commandWindows": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const h=o.homedir(),r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT,c=process.env.CODEX_HOME||p.join(h,'.codex');const s=[r&&p.join(r,'scripts','memoria.mjs'),p.join(c,'.tmp','marketplaces','memoria-ia','plugin','scripts','memoria.mjs'),p.join(h,'.memoria-ia','memoria.mjs')].find(x=>x&&f.existsSync(x));if(s)import(u.pathToFileURL(s).href);else console.log('{}')\" contexto --ia codex"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const h=o.homedir(),r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT,c=process.env.CODEX_HOME||p.join(h,'.codex');const s=[r&&p.join(r,'scripts','memoria.mjs'),p.join(c,'.tmp','marketplaces','memoria-ia','plugin','scripts','memoria.mjs'),p.join(h,'.memoria-ia','memoria.mjs')].find(x=>x&&f.existsSync(x));if(s)import(u.pathToFileURL(s).href);else console.log('{}')\" guarda --ia codex",
+            "timeout": 10,
+            "commandWindows": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const h=o.homedir(),r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT,c=process.env.CODEX_HOME||p.join(h,'.codex');const s=[r&&p.join(r,'scripts','memoria.mjs'),p.join(c,'.tmp','marketplaces','memoria-ia','plugin','scripts','memoria.mjs'),p.join(h,'.memoria-ia','memoria.mjs')].find(x=>x&&f.existsSync(x));if(s)import(u.pathToFileURL(s).href);else console.log('{}')\" guarda --ia codex"
           }
         ]
       }
@@ -18,9 +31,9 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT;let s=r&&p.join(r,'scripts','memoria.mjs');if(!s||!f.existsSync(s))s=p.join(o.homedir(),'.memoria-ia','memoria.mjs');import(u.pathToFileURL(s).href)\" lembrete --ia codex",
+            "command": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const h=o.homedir(),r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT,c=process.env.CODEX_HOME||p.join(h,'.codex');const s=[r&&p.join(r,'scripts','memoria.mjs'),p.join(c,'.tmp','marketplaces','memoria-ia','plugin','scripts','memoria.mjs'),p.join(h,'.memoria-ia','memoria.mjs')].find(x=>x&&f.existsSync(x));if(s)import(u.pathToFileURL(s).href);else console.log('{}')\" lembrete --ia codex",
             "timeout": 15,
-            "commandWindows": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT;let s=r&&p.join(r,'scripts','memoria.mjs');if(!s||!f.existsSync(s))s=p.join(o.homedir(),'.memoria-ia','memoria.mjs');import(u.pathToFileURL(s).href)\" lembrete --ia codex"
+            "commandWindows": "node -e \"const p=require('path'),o=require('os'),f=require('fs'),u=require('url');const h=o.homedir(),r=process.env.CLAUDE_PLUGIN_ROOT||process.env.PLUGIN_ROOT,c=process.env.CODEX_HOME||p.join(h,'.codex');const s=[r&&p.join(r,'scripts','memoria.mjs'),p.join(c,'.tmp','marketplaces','memoria-ia','plugin','scripts','memoria.mjs'),p.join(h,'.memoria-ia','memoria.mjs')].find(x=>x&&f.existsSync(x));if(s)import(u.pathToFileURL(s).href);else console.log('{}')\" lembrete --ia codex"
           }
         ]
       }

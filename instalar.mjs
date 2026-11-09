@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const RAIZ = path.dirname(fileURLToPath(import.meta.url));
@@ -27,6 +28,8 @@ const MARCA_INI = '<!-- memoria-ia:inicio -->', MARCA_FIM = '<!-- memoria-ia:fim
 const log = (s) => console.log(s);
 const existe = (f) => { try { fs.accessSync(f); return true; } catch { return false; } };
 const ler = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
+// Impressao digital ao lado da copia: o script avisa se alguem alterar a copia fora do instalador.
+function selar(script) { fs.writeFileSync(`${script}.sha256`, crypto.createHash('sha256').update(fs.readFileSync(script)).digest('hex') + '  memoria.mjs\n'); }
 function backup(f) { if (existe(f)) { const b = `${f}.bak-memoria-ia`; if (!existe(b)) fs.copyFileSync(f, b); } }
 function rodar(prog, a) {
   const r = spawnSync(prog, a, { encoding: 'utf8', shell: process.platform === 'win32' });
@@ -50,17 +53,17 @@ function blocoEm(arquivo, texto) {
   fs.writeFileSync(arquivo, t ? t + (t.endsWith('\n') ? '' : '\n') : '', 'utf8');
 }
 const INSTRUCAO = `# memoria-ia (instrucao global)
-- Em todo projeto com \`CONTINUAR_AQUI.md\`: leia-o antes de agir (ele chega no inicio da sessao pelo gancho) e siga as regras do topo dele.
-- A cada marco (bug corrigido, funcao entregue, decisao do usuario, descoberta): \`node "${path.join(HOME, '.memoria-ia', 'memoria.mjs')}" obs <tipo> <versao> "<titulo>" "<porque>" ["<arquivos>"]\` e reescreva "Agora"/"Proximo" no CONTINUAR_AQUI.md.
-- Procurar historico: \`... memoria.mjs buscar "<termo>"\` e \`... memoria.mjs ver <ID>\`; nunca leia arquivos grandes inteiros.
-- Projeto sem \`CONTINUAR_AQUI.md\` em que o usuario vai trabalhar: ofereca \`... memoria.mjs instalar\`.`;
+- Projeto com \`CONTINUAR_AQUI.md\`: a retomada chega no inicio da sessao (gancho); siga-a e use a skill "memoria" para registrar marcos.
+- Edicao barrada pela TRAVA memoria-ia: nao insista nem contorne (nada de escrever por shell ou criar outra pasta); avise o usuario quem esta com a trava. So ele libera.
+- Sem o gancho: \`node "${path.join(HOME, '.memoria-ia', 'memoria.mjs')}" status\` e \`... secao agora\`.`;
 
 // ---------------------------------------------------------------- base comum (~/.memoria-ia)
 function base() {
   const d = path.join(HOME, '.memoria-ia');
-  if (REMOVER) { for (const f of ['memoria.mjs', 'kit']) fs.rmSync(path.join(d, f), { recursive: true, force: true }); log('- ~/.memoria-ia: script e kit removidos'); return; }
+  if (REMOVER) { for (const f of ['memoria.mjs', 'memoria.mjs.sha256', 'kit']) fs.rmSync(path.join(d, f), { recursive: true, force: true }); log('- ~/.memoria-ia: script e kit removidos'); return; }
   fs.mkdirSync(d, { recursive: true });
   fs.copyFileSync(path.join(PLUGIN, 'scripts', 'memoria.mjs'), path.join(d, 'memoria.mjs'));
+  selar(path.join(d, 'memoria.mjs'));
   fs.rmSync(path.join(d, 'kit'), { recursive: true, force: true });
   copiarPasta(path.join(PLUGIN, 'kit'), path.join(d, 'kit'));
   log(`- ~/.memoria-ia: script e kit atualizados (${path.join(d, 'memoria.mjs')})`);
@@ -125,6 +128,7 @@ function agy() {
   }
   fs.rmSync(destino, { recursive: true, force: true });
   copiarPasta(PLUGIN, destino);
+  selar(path.join(destino, 'scripts', 'memoria.mjs'));
   blocoEm(path.join(g, 'GEMINI.md'), INSTRUCAO);  // Gemini CLI classico le ~/.gemini/GEMINI.md
   log(`- Antigravity/Gemini: plugin em ${destino} (ganchos, regra e skills) + instrucao em ~/.gemini/GEMINI.md`);
 }

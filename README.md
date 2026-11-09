@@ -1,12 +1,14 @@
 # memoria-ia
 
-**Memória de projeto para IAs de programação — Claude Code, Codex e Gemini/Antigravity.**
-Toda sessão nova começa sabendo onde o projeto está, o próximo passo e o *porquê* das coisas, gastando o mínimo de crédito.
+**Memória de projeto para IAs de programação — Claude Code, Codex e Gemini/Antigravity — trabalhando juntas nos mesmos arquivos.**
+Toda sessão nova começa sabendo onde o projeto está e o próximo passo, gastando o mínimo de crédito, e duas IAs nunca editam o mesmo projeto ao mesmo tempo.
 
 - **Sem servidor, sem banco, sem IA extra.** Só arquivos de texto dentro do projeto + ganchos que leem esses arquivos.
 - **Automático:** ao abrir uma sessão, a retomada do projeto chega sozinha para a IA.
 - **Cobra o registro:** se a IA alterou arquivos e não anotou nada, ela é lembrada (uma vez, sem insistir).
-- **Barato:** a IA lê ~60–80 linhas ao entrar; o histórico só é consultado por busca, em camadas.
+- **Barato:** ao entrar, a IA recebe só *Sempre*, *Agora*, *Próximo* e *Pendências* (~500 tokens); decisões, armadilhas e histórico só por comando.
+- **Trava entre IAs:** a 1ª IA que edita pega a trava; outra IA que tentar editar é barrada pelo gancho e avisa você. Só você libera.
+- **Sem bagunça:** as seções são atualizadas por comando (`agora`, `proximo`, `pendencia`, `anotar`), sem reescrever o arquivo à mão.
 - **Português** por padrão. Funciona em Windows, Linux e macOS (precisa só do Node.js).
 
 ## Como funciona
@@ -26,6 +28,7 @@ E as IAs ganham (no seu usuário, valendo para todo projeto):
 | | Claude Code | Codex | Antigravity / Gemini |
 |---|---|---|---|
 | Retomada automática ao abrir | gancho `SessionStart` | gancho `SessionStart` | gancho `SessionStart` |
+| Trava antes de editar | gancho `PreToolUse` | gancho `PreToolUse` | gancho `PreToolUse` |
 | Lembrete de registrar | gancho `Stop` | gancho `Stop` | gancho `Stop` |
 | Skills `memoria` e `passagem` | ✔ | ✔ | ✔ |
 | Instrução global de reforço | — | `~/.codex/AGENTS.md` | `~/.gemini/GEMINI.md` + regra do plugin |
@@ -57,14 +60,20 @@ Depois de instalar, reinicie a IA. No Codex, aceite confiar nos ganchos se ele p
 
 Num projeto novo, peça à IA: *"instale a memoria-ia aqui"* (ou rode `node ~/.memoria-ia/memoria.mjs instalar`). Depois preencha **Agora**, **Próximo** e **Como trabalhar aqui** no `CONTINUAR_AQUI.md`.
 
-Comandos (a IA usa sozinha; o caminho exato aparece no início de cada sessão):
+Comandos (a IA usa sozinha; o caminho exato aparece no início de cada sessão — abaixo, `memoria` = `node ~/.memoria-ia/memoria.mjs`):
 
 ```bash
-node ~/.memoria-ia/memoria.mjs obs bugfix 1.2 "Botão não salvava" "faltava await no fetch" "app.js"
-node ~/.memoria-ia/memoria.mjs sessao "<pedido>" "<feito>" "<aprendido>" "<próximo>" "<o que falhou>"
-node ~/.memoria-ia/memoria.mjs buscar "fetch"      # índice: só as linhas que batem
-node ~/.memoria-ia/memoria.mjs ver O-0012          # a entrada e as vizinhas
-node ~/.memoria-ia/memoria.mjs status              # tamanho e custo do CONTINUAR_AQUI
+memoria obs bugfix 1.2 "Botão não salvava" "faltava await no fetch" "app.js"   # 1 marco = 1 linha, com o porquê
+memoria agora "Estado: ..." "Versão: ..." "Como voltar: ..."                   # reescreve só a seção Agora
+memoria proximo "testar no celular" "publicar"                                  # reescreve só Próximo (numera sozinho)
+memoria pendencia add "login cai às vezes"   |   memoria pendencia fechar P-03 "timeout do token"
+memoria anotar armadilhas "não usar a porta 80"                                 # também: decisoes, sempre, como...
+memoria secao armadilhas        # abre uma seção sob demanda
+memoria buscar "fetch"          # índice: só as linhas que batem
+memoria ver O-0012              # a entrada e as vizinhas
+memoria sessao "<pedido>" "<feito>" "<aprendido>" "<próximo>" "<o que falhou>"   # fim da sessão (libera a trava)
+memoria trava ver               # quem está editando
+memoria status                  # tamanho, custo da retomada e trava
 ```
 
 Tipos de observação: `bugfix` · `feature` · `perf` · `refactor` · `mudanca` · `decisao` · `descoberta` · `seguranca`.
@@ -73,7 +82,21 @@ Tipos de observação: `bugfix` · `feature` · `perf` · `refactor` · `mudanca
 
 Trocando de IA no meio do trabalho? Peça **"passagem"**: a skill atualiza Agora/Próximo/Armadilhas e resume o que falhou, para a próxima IA continuar do ponto exato.
 
-Desligar o lembrete numa sessão: variável de ambiente `MEMORIA_IA_LEMBRETE=0`.
+## Trava entre IAs
+
+- A primeira IA que **edita** um arquivo do projeto pega a trava (`.memoria-ia-trava.json`, já vai para o `.gitignore`).
+- Outra IA que tentar editar é **barrada antes da edição**, avisa você quem está com a trava e desde quando, e não consegue liberar nem apagar a trava pelo shell.
+- A dona libera sozinha ao encerrar (`memoria sessao`) ou com `memoria trava liberar`.
+- **Trava de outra IA, só você libera**, no seu terminal: `node ~/.memoria-ia/memoria.mjs trava liberar --forcar`.
+
+## Segurança das cópias
+
+O instalador sela as cópias do script com sha256. Se alguma for alterada fora do instalador (por outra IA, por exemplo), a retomada e o `status` avisam. Os ganchos usam, nesta ordem: o script do plugin → o clone do Codex vindo do GitHub (somente leitura) → `~/.memoria-ia`.
+
+## Ajustes
+
+- `MEMORIA_IA_NIVEL=completo`: injeta o `CONTINUAR_AQUI.md` inteiro em vez da retomada curta.
+- `MEMORIA_IA_LEMBRETE=0`: desliga o lembrete de registrar.
 
 ## Testes
 
