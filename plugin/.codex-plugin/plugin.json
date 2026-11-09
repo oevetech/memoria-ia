@@ -1,0 +1,25 @@
+{
+  "name": "memoria-ia",
+  "version": "1.0.0",
+  "description": "Memoria de projeto para IAs (Claude Code, Codex, Gemini/Antigravity): retomada curta, observacoes com o porque e busca barata. Sem servidor e sem IA extra.",
+  "author": {
+    "name": "oevetech",
+    "url": "https://github.com/oevetech"
+  },
+  "homepage": "https://github.com/oevetech/memoria-ia",
+  "repository": "https://github.com/oevetech/memoria-ia",
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./hooks/codex-hooks.json",
+  "interface": {
+    "displayName": "memoria-ia",
+    "shortDescription": "Retomada curta do projeto em toda sessao.",
+    "developerName": "oevetech",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/oevetech/memoria-ia"
+  }
+}

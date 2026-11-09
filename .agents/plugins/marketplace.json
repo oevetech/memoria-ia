@@ -1,0 +1,20 @@
+{
+  "name": "memoria-ia",
+  "interface": {
+    "displayName": "memoria-ia"
+  },
+  "plugins": [
+    {
+      "name": "memoria-ia",
+      "source": {
+        "source": "local",
+        "path": "./plugin"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

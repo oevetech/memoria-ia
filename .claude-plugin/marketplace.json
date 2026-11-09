@@ -1,0 +1,17 @@
+{
+  "name": "memoria-ia",
+  "owner": {
+    "name": "oevetech"
+  },
+  "metadata": {
+    "description": "Memoria de projeto para IAs (Claude Code, Codex, Gemini/Antigravity): retomada curta, observacoes com o porque e busca barata. Sem servidor e sem IA extra."
+  },
+  "plugins": [
+    {
+      "name": "memoria-ia",
+      "version": "1.0.0",
+      "source": "./plugin",
+      "description": "Memoria de projeto para IAs (Claude Code, Codex, Gemini/Antigravity): retomada curta, observacoes com o porque e busca barata. Sem servidor e sem IA extra."
+    }
+  ]
+}
