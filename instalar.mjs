@@ -126,8 +126,14 @@ function agy() {
     blocoEm(path.join(g, 'GEMINI.md'), '');
     log('- Antigravity/Gemini: plugin e instrucao global removidos'); return;
   }
-  fs.rmSync(destino, { recursive: true, force: true });
+  try { fs.rmSync(destino, { recursive: true, force: true }); }
+  catch { /* Antigravity aberto segura a pasta (EPERM): atualiza por cima */ }
   copiarPasta(PLUGIN, destino);
+  // O Antigravity roda o gancho na pasta do workspace, nao na do plugin: com caminho relativo o node
+  // falha (MODULE_NOT_FOUND) e o Antigravity trata a falha como "negado" -> toda ferramenta bloqueada.
+  const scriptAbs = path.join(destino, 'scripts', 'memoria.mjs').replace(/\\/g, '/');
+  const hj = path.join(destino, 'hooks.json');
+  if (existe(hj)) fs.writeFileSync(hj, ler(hj).replace(/node scripts\/memoria\.mjs/g, `node \\"${scriptAbs}\\"`), 'utf8');
   selar(path.join(destino, 'scripts', 'memoria.mjs'));
   blocoEm(path.join(g, 'GEMINI.md'), INSTRUCAO);  // Gemini CLI classico le ~/.gemini/GEMINI.md
   log(`- Antigravity/Gemini: plugin em ${destino} (ganchos, regra e skills) + instrucao em ~/.gemini/GEMINI.md`);
