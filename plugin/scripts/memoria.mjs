@@ -321,11 +321,14 @@ function instalar([destino, nome]) {
 
 // ------------------------------------------------------------------ ganchos
 function cwdDoGancho(e) { return e.cwd || (Array.isArray(e.workspacePaths) && e.workspacePaths[0]) || process.cwd(); }
+// Antigravity exige "decision" no PreToolUse: resposta {} conta como NEGADO (bloqueava tudo, ate projeto novo).
+// Liberado = fluxo normal de permissao: edicao/shell pedem confirmacao ("ask", respeita "sempre permitir"); leitura passa.
+let decisaoLivreAgy = 'ask';
 function responder(ia, evento, texto, bloquear) {
   if (ia === 'texto') { if (texto) console.log(texto); return; }
   if (ia === 'agy') {
     if (evento === 'SessionStart') return console.log(JSON.stringify(texto ? { injectSteps: [{ systemMessage: { systemMessage: texto } }] } : {}));
-    if (evento === 'PreToolUse') return console.log(JSON.stringify(bloquear ? { decision: 'deny', reason: texto } : {}));
+    if (evento === 'PreToolUse') return console.log(JSON.stringify(bloquear ? { decision: 'deny', reason: texto } : { decision: decisaoLivreAgy }));
     return console.log(JSON.stringify(bloquear ? { decision: 'continue', reason: texto } : {}));
   }
   if (evento === 'SessionStart') return console.log(JSON.stringify(texto ? { hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: texto } } : {}));
@@ -387,7 +390,9 @@ async function guarda() {
   const e = await lerStdin();
   const nome = e.tool_name || e.toolCall?.name || '', entrada = e.tool_input || e.toolCall?.args || {};
   const base = cwdDoGancho(e);
-  if (/^(Bash|run_command|shell|exec_command|local_shell)$/i.test(nome)) {
+  const ehShell = /^(Bash|run_command|shell|exec_command|local_shell)$/i.test(nome);
+  decisaoLivreAgy = !nome || ehShell || FERRAMENTAS_EDICAO.has(nome) ? 'ask' : 'allow';
+  if (ehShell) {
     const c = String(entrada.command || entrada.CommandLine || entrada.cmd || (Array.isArray(entrada.command) ? entrada.command.join(' ') : ''));
     const r = acharRaiz(base), t = r && lerTrava(r);
     if (t && t.dono !== IA && /memoria\.mjs[\s\S]*\btrava\b[\s\S]*\b(liberar|pegar)\b/i.test(c)) return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
@@ -453,6 +458,6 @@ if (!comando || !tabela[comando]) {
 }
 try { await tabela[comando](resto); }
 catch (err) {
-  if (['contexto', 'guarda', 'lembrete'].includes(comando)) { console.log('{}'); process.exit(0); }   // gancho nunca trava a IA
+  if (['contexto', 'guarda', 'lembrete'].includes(comando)) { console.log(comando === 'guarda' && IA === 'agy' ? '{"decision":"ask"}' : '{}'); process.exit(0); }   // gancho nunca trava a IA
   console.error(`memoria-ia: ${err.message}`); process.exit(1);
 }

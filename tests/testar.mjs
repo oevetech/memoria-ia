@@ -110,6 +110,12 @@ j = guarda('codex', 'apply_patch', { input: '*** Begin Patch\n*** Update File: s
 ok(j?.decision === 'block' && j?.hookSpecificOutput?.permissionDecision === 'deny' && /Claude/.test(j.reason) && /so ele libera/.test(j.reason), 'outra IA (Codex) e barrada com aviso');
 j = json(run(['--ia', 'agy', 'guarda'], { input: JSON.stringify({ workspacePaths: [proj], toolCall: { name: 'write_to_file', args: { TargetFile: path.join(proj, 'c.js') } } }) }));
 ok(j?.decision === 'deny', 'Antigravity tambem e barrado (decision deny)');
+const outroAgy = path.join(TMP, 'outroAgy');
+fs.mkdirSync(outroAgy);
+const agyG = (nome, args) => json(run(['--ia', 'agy', 'guarda'], { input: JSON.stringify({ workspacePaths: [outroAgy], toolCall: { name: nome, args } }) }));
+ok(agyG('write_to_file', { TargetFile: path.join(outroAgy, 'novo.js') })?.decision === 'ask', 'Antigravity em projeto novo: edicao segue o fluxo normal (ask), nunca {}');
+ok(agyG('run_command', { CommandLine: 'dir' })?.decision === 'ask', 'Antigravity: shell comum segue o fluxo normal (ask)');
+ok(agyG('view_file', { AbsolutePath: path.join(outroAgy, 'x') })?.decision === 'allow', 'Antigravity: leitura liberada (allow)');
 ok(guarda('codex', 'Bash', { command: `node "${SCRIPT}" --ia codex trava liberar --forcar` })?.decision === 'block', 'IA barrada nao consegue liberar a trava pelo shell');
 ok(guarda('codex', 'Bash', { command: 'rm .memoria-ia-trava.json' })?.decision === 'block', 'IA barrada nao consegue apagar o arquivo da trava');
 ok(vazio(guarda('codex', 'Bash', { command: 'ls -la' })), 'shell comum da outra IA continua liberado (leitura)');
