@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "memoria-ia",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "source": "./plugin",
       "description": "Memoria de projeto para IAs (Claude Code, Codex, Gemini/Antigravity): retomada curta, observacoes com o porque e busca barata. Sem servidor e sem IA extra."
     }

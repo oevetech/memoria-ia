@@ -25,7 +25,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const VERSAO = '1.2.0';
+const VERSAO = '1.2.1';
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(AQUI, 'memoria.mjs');
 // kit ao lado do script (~/.memoria-ia/kit) ou na pasta do plugin (plugin/kit)
@@ -542,7 +542,8 @@ function cerebroAnotar([area, erro, causa, solucao, tags = '', falhou = '']) {
   if (!AREAS[A]) sair(`Area desconhecida: ${area}. Use: ${Object.keys(AREAS).join(' ')}`);
   semSegredo(erro, causa, solucao, tags, falhou);
   const c = cerebroOuSair();
-  const parecido = pontuar(c, erro)[0];   // so o erro: tags diluem o trecho exato
+  // so o erro (tags diluem o trecho exato) e so na MESMA area (ESP "compilar" nao e duplicata de AND "compilar")
+  const parecido = pontuar(c, erro).find((x) => x.l.split(' | ')[1] === A);
   if (parecido && parecido.p >= 2.2 && !opcoes.forcar) {
     sair(`Ja existe algo parecido:\n${parecido.l}\nSe e o mesmo problema: ${cmd()} cerebro somar ${parecido.l.split(' | ')[0]} "<o que ha de novo>"\nSe e outro mesmo: repita com --forcar`, 3);
   }

@@ -221,6 +221,8 @@ ok(versoes.every((v) => v === ler(SCRIPT).match(/const VERSAO = '([^']+)'/)[1]),
   ok(/nada parecido/.test(rc.stdout), 'buscar sem resultado diz que nao achou');
   rc = run(['cerebro', 'anotar', 'AND', 'SDK location not found', 'outra causa', 'outra solucao', 'sdk'], { cwd: proj, extraEnv: envC });
   ok(rc.status === 3 && /somar E-AND-0001/.test(rc.stdout), 'anotar duplicado sugere somar');
+  rc = run(['cerebro', 'anotar', 'WIN', 'SDK location not found no PowerShell', 'x', 'y'], { cwd: proj, extraEnv: envC });
+  ok(/E-WIN-0001 anotado/.test(rc.stdout), 'duplicata so conta na mesma area');
   const outro = path.join(TMP, 'app2'); fs.mkdirSync(outro);
   rc = run(['cerebro', 'somar', 'E-AND-0001', 'mesmo erro no app2'], { cwd: outro, extraEnv: envC });
   ok(/proj,app2/.test(ler(path.join(CER, 'INDICE.md'))) && /mesmo erro no app2/.test(ler(path.join(CER, 'solucoes', 'E-AND-0001.md'))), 'somar acrescenta projeto e ocorrencia');
@@ -230,7 +232,7 @@ ok(versoes.every((v) => v === ler(SCRIPT).match(/const VERSAO = '([^']+)'/)[1]),
   ok(/Area desconhecida/.test(rc.stdout), 'area invalida recusada');
   ok(/1\. SDK|SDK location/.test(run(['cerebro', 'ver', 'e-and-0001'], { extraEnv: envC }).stdout), 'ver aceita minusculas');
   j = json(run(['--ia', 'claude', 'contexto'], { input: JSON.stringify({ cwd: proj, session_id: 'c1' }), extraEnv: envC }));
-  ok(/Cerebro central \(2 solucoes/.test(j?.hookSpecificOutput?.additionalContext || ''), 'retomada traz 1 linha do cerebro');
+  ok(/Cerebro central \(3 solucoes/.test(j?.hookSpecificOutput?.additionalContext || ''), 'retomada traz 1 linha do cerebro');
   ok(/projeto: .*proj/.test(run(['status', proj], { cwd: TMP }).stdout), 'status aceita a pasta do projeto');
   ok(/projeto: .*proj/.test(run(['--pasta', proj, 'status'], { cwd: TMP }).stdout), '--pasta roda como se estivesse no projeto');
 }
