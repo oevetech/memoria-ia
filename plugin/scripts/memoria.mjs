@@ -13,7 +13,10 @@
 //   buscar "<termo>" | ver <O-0012|S-003> | ultimas [N]
 //   sessao "<pedido>" "<feito>" "<aprendido>" "<proximo>" ["<falhou>"]   (libera a trava se for sua)
 //   trava ver | trava pegar "<tarefa>" | trava liberar      (liberar trava de OUTRA IA: so o usuario, --forcar)
-//   status | instalar [pasta] [nome]
+//   status [pasta] | instalar [pasta] [nome]            (--pasta <projeto> em qualquer comando = rodar como se estivesse la)
+//   cerebro iniciar "<pasta>" | buscar "<erro>" | ver <E-AND-0001> | status
+//   cerebro anotar <AREA> "<erro exato>" "<causa>" "<solucao>" ["tags"] ["o que nao funcionou"] | somar <ID> "<nota>"
+//     -> catalogo CENTRAL de erros/solucoes de todos os projetos (pasta unica, fora dos projetos)
 // Ganchos: contexto (inicio da sessao) | guarda (antes de editar: trava) | lembrete (fim do turno)
 
 import fs from 'node:fs';
@@ -22,7 +25,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const VERSAO = '1.1.0';
+const VERSAO = '1.2.0';
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(AQUI, 'memoria.mjs');
 // kit ao lado do script (~/.memoria-ia/kit) ou na pasta do plugin (plugin/kit)
@@ -45,10 +48,12 @@ const brutos = process.argv.slice(process.argv[1] && /memoria\.mjs$/i.test(proce
 const opcoes = {};
 const argv = [];
 for (let i = 0; i < brutos.length; i++) {
-  if (brutos[i] === '--ia' || brutos[i] === '--nivel') { opcoes[brutos[i].slice(2)] = brutos[++i]; continue; }
+  if (brutos[i] === '--ia' || brutos[i] === '--nivel' || brutos[i] === '--pasta') { opcoes[brutos[i].slice(2)] = brutos[++i]; continue; }
   if (brutos[i] === '--forcar') { opcoes.forcar = true; continue; }
   argv.push(brutos[i]);
 }
+// 1.2: --pasta <projeto> = rodar como se estivesse dentro dele (IA que roda comandos de outra pasta, ex.: Codex).
+if (opcoes.pasta) { try { process.chdir(path.resolve(opcoes.pasta)); } catch { console.log(`Pasta nao existe: ${opcoes.pasta}`); process.exit(1); } }
 const IA = (opcoes.ia || process.env.MEMORIA_IA_QUEM || 'texto').toLowerCase();
 
 // ------------------------------------------------------------------ utilidades
@@ -280,10 +285,10 @@ function ultimas([n]) {
   const linhas = ler(arqObs(raizOuSair())).split(/\r?\n/).filter((l) => /^O-\d+/.test(l));
   console.log(linhas.slice(-(parseInt(n, 10) || 10)).join('\n') || '(sem observacoes ainda)');
 }
-function status() {
+function status([pasta]) {
   const aviso = avisoIntegridade();
   if (aviso) console.log(aviso);
-  const r = acharRaiz(process.cwd());
+  const r = acharRaiz(pasta ? path.resolve(pasta) : process.cwd());   // 1.2: a pasta passada vale (antes era ignorada)
   if (!r) return console.log(`memoria-ia ${VERSAO} | sem memoria neste projeto. Para criar: ${cmd()} instalar`);
   const t = ler(arqRet(r)), linhas = t.split(/\r?\n/).length, curto = retomadaCurta(r, 'texto');
   const nObs = (ler(arqObs(r)).match(/^O-\d+/gm) || []).length, nSes = (ler(arqSes(r)).match(/^## S-\d+/gm) || []).length, tv = lerTrava(r);
@@ -362,6 +367,8 @@ function retomadaCurta(r, ia) {
   const obsL = ler(arqObs(r)).split(/\r?\n/).filter((l) => /^O-\d+/.test(l)).slice(-3)
     .map((l) => { const c = l.split(' | '); return `${c[0]} ${c[3] || ''}: ${(c[4] || '').slice(0, 90)}`; });
   if (obsL.length) partes.push(`Ultimas obs: ${obsL.join(' · ')}`);
+  const lc = linhaCerebro(ia);
+  if (lc) partes.push(lc);
   partes.push(`memoria = ${cmd(ia)}  ->  obs <tipo> <versao> "<titulo>" "<porque>" ["<arq>"] | agora "..." | proximo "..." | pendencia add|fechar | anotar <secao> "..." | secao <nome> | buscar "<termo>" | ver <ID> | sessao ... | trava ver. Regras: skill "memoria".`);
   return `# memoria-ia: ${titulo}\n\n${partes.join('\n\n')}`;
 }
@@ -370,7 +377,8 @@ async function contexto() {
   const aviso = avisoIntegridade();
   if (!r) {
     if (!pareceProjeto(base)) return responder(IA, 'SessionStart', aviso);
-    return responder(IA, 'SessionStart', `${aviso ? aviso + '\n' : ''}memoria-ia: esta pasta ainda nao tem ${ARQ_RETOMADA}. Se o usuario for trabalhar neste projeto, ofereca criar a memoria: ${cmd(IA)} instalar "${base}"`);
+    const lc = linhaCerebro(IA);
+    return responder(IA, 'SessionStart', `${aviso ? aviso + '\n' : ''}memoria-ia: esta pasta ainda nao tem ${ARQ_RETOMADA}. Se o usuario for trabalhar neste projeto, ofereca criar a memoria: ${cmd(IA)} instalar "${base}"${lc ? `\n${lc}` : ''}`);
   }
   const t = lerTrava(r);
   const linhaTrava = t && t.dono !== IA ? `${mensagemBloqueio(t)}\n\n` : t ? `(Trava deste projeto e sua: ${textoTrava(t)}.)\n\n` : '';
@@ -421,7 +429,7 @@ function salvarEstado(s) {
 }
 // Houve edicao de arquivo depois do ultimo registro na memoria? (heuristica por texto na transcricao de qualquer IA)
 const RE_EDICAO = new RegExp(`"(?:name|tool_name|type)"\\s*:\\s*"(?:${[...FERRAMENTAS_EDICAO].join('|')})"`);
-const RE_MEMORIA = /CONTINUAR_AQUI\.md|OBSERVACOES\.md|SESSOES\.md|memoria\.(?:mjs|ps1)[^"\n]{0,60}\b(?:obs|sessao|agora|proximo|pendencia|anotar)\b/;
+const RE_MEMORIA = /CONTINUAR_AQUI\.md|OBSERVACOES\.md|SESSOES\.md|memoria\.(?:mjs|ps1)[^"\n]{0,60}\b(?:obs|sessao|agora|proximo|pendencia|anotar|somar)\b/;
 function editouSemRegistrar(transcricao) {
   if (!transcricao || !existe(transcricao)) return false;
   let txt;
@@ -449,11 +457,151 @@ async function lembrete() {
     `${cmd(IA)} obs ... e, se mudou o rumo, agora/proximo. Se foi trivial, so encerre. Seja breve.`, true);
 }
 
+// ------------------------------------------------------------------ cerebro (catalogo CENTRAL de erros e solucoes)
+// UMA pasta fora de todos os projetos, para todas as IAs. Leitura barata em 2 camadas:
+//   INDICE.md        = 1 linha por solucao (ID | area | tags | erro | causa curta | projetos | data). A busca le so isto
+//                      e imprime as 5 linhas mais parecidas (~150 tokens, nao importa o tamanho do cerebro).
+//   solucoes/<ID>.md = card completo (erro exato, causa, solucao, o que NAO funcionou, ocorrencias).
+// Codigo: E-<AREA>-NNNN (ex.: E-AND-0007). Pasta: env MEMORIA_CEREBRO ou ~/.memoria-ia/config.json {"cerebro": "..."}.
+const AREAS = { AND: 'Android/Gradle/Kotlin', ESP: 'ESP32/ESPHome/embarcado', WIN: 'Windows/PowerShell/drivers', WEB: 'Web/JS/HTML/Vercel',
+  PY: 'Python', NODE: 'Node/npm', GIT: 'Git/GitHub/gh', IA: 'Ferramentas de IA (Claude/Codex/Gemini/ganchos)', HA: 'Home Assistant',
+  CPP: 'C/C++/CMake', GEN: 'Geral/outros' };
+const CONFIG = path.join(os.homedir(), '.memoria-ia', 'config.json');
+const CAB_INDICE = '# Cerebro — indice (1 linha por solucao; NAO leia inteiro: use memoria cerebro buscar "<erro>")\n# ID | area | tags | erro/sintoma | causa | projetos | data\n\n';
+const PARADAS = new Set(('a o e de da do das dos em no na nos nas um uma para por com sem que se nao the of to in on for is at and or ' +
+  'not error erro failed falhou falha cannot could exception warning').split(' '));
+const RE_SEGREDO = /(sk-[A-Za-z0-9_-]{16,}|ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|xox[abp]-[A-Za-z0-9-]{10,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})/;
+
+function pastaCerebro() {
+  if (process.env.MEMORIA_CEREBRO) return path.resolve(process.env.MEMORIA_CEREBRO);
+  try { const c = JSON.parse(ler(CONFIG)); if (c.cerebro) return path.resolve(c.cerebro); } catch { /* sem config */ }
+  return '';
+}
+const arqIndice = (c) => path.join(c, 'INDICE.md');
+const arqCard = (c, id) => path.join(c, 'solucoes', `${id}.md`);
+function cerebroOuSair() {
+  const c = pastaCerebro();
+  if (!c || !existe(arqIndice(c))) sair(`Cerebro nao configurado. Crie/aponte: ${cmd()} cerebro iniciar "<pasta>"`);
+  return c;
+}
+const palavras = (s) => [...new Set(norm(s).replace(/[^a-z0-9_.:/-]+/g, ' ').split(/[\s/:]+/)
+  .map((w) => w.replace(/^[.-]+|[.-]+$/g, '')).filter((w) => w.length > 1 && !PARADAS.has(w)))];
+const linhasIndice = (c) => ler(arqIndice(c)).split(/\r?\n/).filter((l) => /^E-[A-Z]+-\d+ \|/.test(l));
+/** Pontua cada linha do indice contra a consulta: palavras em comum (as raras valem mais) + trecho exato. */
+function pontuar(c, consulta) {
+  const q = palavras(consulta), linhas = linhasIndice(c);
+  if (!q.length) return [];
+  const df = new Map();
+  const tok = linhas.map((l) => { const s = new Set(palavras(l)); s.forEach((w) => df.set(w, (df.get(w) || 0) + 1)); return s; });
+  const frase = norm(consulta).slice(0, 60);
+  return linhas.map((l, i) => {
+    let p = 0;
+    for (const w of q) if (tok[i].has(w)) p += Math.log(1 + linhas.length / (df.get(w) || 1));
+    if (frase.length >= 12 && norm(l).includes(frase)) p += 5;
+    return { l, p: p / Math.sqrt(q.length) };
+  }).filter((x) => x.p > 0.35).sort((a, b) => b.p - a.p);
+}
+function semSegredo(...textos) {
+  if (RE_SEGREDO.test(textos.join(' '))) sair('Recusado: o texto parece ter chave/token/senha. Troque por <SEGREDO> e anote de novo.', 1);
+}
+function projetoAtual() { const r = acharRaiz(process.cwd()); return path.basename(r || process.cwd()); }
+
+function cerebroIniciar([pasta]) {
+  if (!pasta) sair(`uso: ${cmd()} cerebro iniciar "<pasta do cerebro>"`);
+  const c = path.resolve(pasta);
+  fs.mkdirSync(path.join(c, 'solucoes'), { recursive: true });
+  garantir(arqIndice(c), CAB_INDICE);
+  garantir(path.join(c, 'README.md'), `# Cerebro (memoria-ia)\n\nCatalogo UNICO de erros e solucoes de todos os projetos, para qualquer IA.\n\n` +
+    `- Antes de pesquisar um erro: \`memoria cerebro buscar "<texto do erro>"\` -> \`memoria cerebro ver <ID>\`.\n` +
+    `- Resolveu algo que custou tempo: \`memoria cerebro anotar <AREA> "<erro exato>" "<causa>" "<solucao>" ["tags"] ["o que NAO funcionou"]\`.\n` +
+    `- Mesmo erro em outro projeto ou info nova: \`memoria cerebro somar <ID> "<nota>"\`.\n- NAO edite INDICE.md a mao; NAO leia INDICE.md inteiro.\n\n` +
+    `Areas: ${Object.entries(AREAS).map(([k, v]) => `${k} (${v})`).join(', ')}.\n`);
+  for (const f of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md']) garantir(path.join(c, f), 'Esta pasta e o cerebro da memoria-ia. Leia README.md (curto). Nunca leia INDICE.md inteiro: use `memoria cerebro buscar`.\n');
+  fs.mkdirSync(path.dirname(CONFIG), { recursive: true });
+  let cfg = {}; try { cfg = JSON.parse(ler(CONFIG)) || {}; } catch { /* novo */ }
+  fs.writeFileSync(CONFIG, JSON.stringify({ ...cfg, cerebro: c }, null, 2) + '\n', 'utf8');
+  console.log(`Cerebro pronto em ${c} (${linhasIndice(c).length} solucoes). Config: ${CONFIG}`);
+}
+function cerebroBuscar([consulta, n]) {
+  if (!consulta) sair(`uso: ${cmd()} cerebro buscar "<texto do erro ou sintoma>"`);
+  const c = cerebroOuSair(), achados = pontuar(c, consulta).slice(0, parseInt(n, 10) || 5);
+  if (!achados.length) return console.log('(nada parecido no cerebro — resolva e depois: memoria cerebro anotar ...)');
+  achados.forEach((x) => console.log(x.l.length > 260 ? x.l.slice(0, 257) + '...' : x.l));
+  console.log('-> detalhes: memoria cerebro ver <ID>');
+}
+function cerebroVer([id]) {
+  if (!id) sair(`uso: ${cmd()} cerebro ver <E-AND-0001>`);
+  const c = cerebroOuSair(), f = arqCard(c, id.toUpperCase());
+  console.log(existe(f) ? ler(f).trim() : '(solucao nao encontrada)');
+}
+function cerebroAnotar([area, erro, causa, solucao, tags = '', falhou = '']) {
+  if (!area || !erro || !causa || !solucao) {
+    sair(`uso: ${cmd()} cerebro anotar <AREA> "<erro exato/sintoma>" "<causa>" "<solucao (passos/comandos)>" ["tag1,tag2"] ["o que NAO funcionou"]\nAreas: ${Object.keys(AREAS).join(' ')}`);
+  }
+  const A = area.toUpperCase();
+  if (!AREAS[A]) sair(`Area desconhecida: ${area}. Use: ${Object.keys(AREAS).join(' ')}`);
+  semSegredo(erro, causa, solucao, tags, falhou);
+  const c = cerebroOuSair();
+  const parecido = pontuar(c, erro)[0];   // so o erro: tags diluem o trecho exato
+  if (parecido && parecido.p >= 2.2 && !opcoes.forcar) {
+    sair(`Ja existe algo parecido:\n${parecido.l}\nSe e o mesmo problema: ${cmd()} cerebro somar ${parecido.l.split(' | ')[0]} "<o que ha de novo>"\nSe e outro mesmo: repita com --forcar`, 3);
+  }
+  const proj = projetoAtual(), data = hoje(false);
+  fs.mkdirSync(path.join(c, 'solucoes'), { recursive: true });
+  for (let tent = 0; tent < 20; tent++) {   // 2 IAs anotando juntas: flag 'wx' garante ID unico
+    const usados = linhasIndice(c).map((l) => l.split(' | ')[0]).concat(fs.readdirSync(path.join(c, 'solucoes')).map((f) => f.replace(/\.md$/, '')));
+    const id = proximoId(usados.join('\n'), new RegExp(`^E-${A}-(\\d+)`, 'gm'), `E-${A}`, 4);
+    const card = `# ${id} — ${limpo(erro).slice(0, 120)}\n\n- Area: ${A} (${AREAS[A]})\n- Tags: ${limpo(tags) || '-'}\n- Primeira vez: ${data}, projeto ${proj}, por ${nomeIA(IA)}\n\n` +
+      `## Erro / sintoma (texto exato)\n${String(erro).trim()}\n\n## Causa\n${String(causa).trim()}\n\n## Solucao\n${String(solucao).trim()}\n\n` +
+      `## O que NAO funcionou\n${String(falhou).trim() || '-'}\n\n## Ocorrencias\n- ${data} ${proj} (${nomeIA(IA)})\n`;
+    try { fs.writeFileSync(arqCard(c, id), card, { encoding: 'utf8', flag: 'wx' }); } catch (e) { if (e.code === 'EEXIST') continue; throw e; }
+    fs.appendFileSync(arqIndice(c), `${id} | ${A} | ${limpo(tags).slice(0, 60)} | ${limpo(erro).slice(0, 110)} | ${limpo(causa).slice(0, 80)} | ${proj} | ${data}\n`, 'utf8');
+    return console.log(`${id} anotado no cerebro.`);
+  }
+  sair('Nao consegui gerar um ID livre (muitas gravacoes ao mesmo tempo?)', 1);
+}
+function cerebroSomar([id, nota]) {
+  if (!id || !nota) sair(`uso: ${cmd()} cerebro somar <ID> "<o que ha de novo: outro projeto, variacao, solucao melhor>"`);
+  semSegredo(nota);
+  const c = cerebroOuSair(), ID = id.toUpperCase(), f = arqCard(c, ID);
+  if (!existe(f)) sair('(solucao nao encontrada)', 1);
+  const proj = projetoAtual();
+  fs.appendFileSync(f, `- ${hoje(false)} ${proj} (${nomeIA(IA)}): ${limpo(nota)}\n`, 'utf8');
+  const txt = ler(arqIndice(c));
+  const nova = txt.split('\n').map((l) => {
+    if (!l.startsWith(`${ID} | `)) return l;
+    const col = l.split(' | ');
+    if (col.length >= 7 && !col[5].split(',').map((s) => s.trim()).includes(proj)) col[5] = `${col[5].trim()},${proj}`;
+    return col.join(' | ');
+  }).join('\n');
+  if (nova !== txt) fs.writeFileSync(arqIndice(c), nova, 'utf8');
+  console.log(`${ID}: ocorrencia somada.`);
+}
+function cerebroStatus() {
+  const c = pastaCerebro();
+  if (!c || !existe(arqIndice(c))) return console.log(`cerebro: nao configurado (${cmd()} cerebro iniciar "<pasta>")`);
+  const l = linhasIndice(c), por = {};
+  l.forEach((x) => { const a = x.split(' | ')[1]; por[a] = (por[a] || 0) + 1; });
+  console.log(`cerebro: ${c} | ${l.length} solucoes${l.length ? ` (${Object.entries(por).map(([a, n]) => `${a} ${n}`).join(', ')})` : ''} | indice ~${tokens(ler(arqIndice(c)))} tokens (a busca mostra so 5 linhas)`);
+}
+function cerebro([acao, ...args]) {
+  const t = { iniciar: cerebroIniciar, buscar: cerebroBuscar, ver: cerebroVer, anotar: cerebroAnotar, somar: cerebroSomar, status: cerebroStatus };
+  if (!t[acao]) sair(`uso: ${cmd()} cerebro iniciar|buscar|ver|anotar|somar|status ...`);
+  return t[acao](args);
+}
+/** 1 linha para a retomada (so se o cerebro existir). */
+function linhaCerebro(ia) {
+  const c = pastaCerebro();
+  if (!c || !existe(arqIndice(c))) return '';
+  return `Cerebro central (${linhasIndice(c).length} solucoes de todos os projetos): erro/obstaculo? ANTES de pesquisar: ${cmd(ia)} cerebro buscar "<erro>". ` +
+    'Resolveu algo que custou tempo: cerebro anotar <AREA> "<erro>" "<causa>" "<solucao>" (mesmo erro: cerebro somar <ID>).';
+}
+
 // ------------------------------------------------------------------ principal
 const [comando, ...resto] = argv;
-const tabela = { obs, agora: agoraCmd, proximo: proximoCmd, pendencia, anotar, secao, sessao, buscar, ver, ultimas, status, instalar, trava, contexto, guarda, lembrete };
+const tabela = { obs, agora: agoraCmd, proximo: proximoCmd, pendencia, anotar, secao, sessao, buscar, ver, ultimas, status, instalar, trava, contexto, guarda, lembrete, cerebro };
 if (!comando || !tabela[comando]) {
-  console.log(`memoria-ia ${VERSAO}\ncomandos: obs | agora | proximo | pendencia | anotar | secao | buscar | ver | ultimas | sessao | trava | status | instalar\nexemplo: ${cmd()} obs bugfix 1.2 "Botao nao salvava" "faltava await no fetch" "app.js"`);
+  console.log(`memoria-ia ${VERSAO}\ncomandos: obs | agora | proximo | pendencia | anotar | secao | buscar | ver | ultimas | sessao | trava | status | instalar | cerebro\nexemplo: ${cmd()} obs bugfix 1.2 "Botao nao salvava" "faltava await no fetch" "app.js"`);
   process.exit(comando ? 2 : 0);
 }
 try { await tabela[comando](resto); }

@@ -29,5 +29,15 @@ A retomada traz so Sempre/Agora/Proximo/Pendencias; o resto do `CONTINUAR_AQUI.m
 ## Procurar (barato, em camadas)
 1. `memoria buscar "<termo>"` -> so as linhas que batem.  2. `memoria ver <O-0012>` -> a entrada e as vizinhas; `ver S-003` -> sessao.  3. So entao abra arquivos citados.
 
+## Cerebro central (erros e solucoes de TODOS os projetos)
+Pasta unica, fora dos projetos (ex.: `G:/projetos_claude/cerebro-ia`), compartilhada por todas as IAs.
+- **Travou num erro/obstaculo? ANTES de pesquisar na web ou tentar coisas:** `memoria cerebro buscar "<texto do erro>"`
+  (cole a parte mais especifica da mensagem). Achou um codigo -> `memoria cerebro ver E-AND-0007` e aplique.
+- **Resolveu algo que custou tempo** (erro de build, driver, ferramenta, API, armadilha de plataforma):
+  `memoria cerebro anotar <AREA> "<erro exato>" "<causa>" "<solucao com comandos>" ["tags"] ["o que NAO funcionou"]`.
+  Areas: AND ESP WIN WEB PY NODE GIT IA HA CPP GEN. Generalize (sem dados do usuario, sem segredos; caminhos como exemplo).
+- Ja existia (o anotar avisa)? `memoria cerebro somar <ID> "<projeto/variacao/solucao melhor>"`.
+- Nao anote o que e especifico de um projeto (vai no `obs` dele) nem o obvio. Nunca leia `INDICE.md` inteiro.
+
 ## Projeto sem memoria
 `memoria instalar "<pasta>" "<Nome>"`, depois `memoria agora ...`, `memoria proximo ...`, `memoria anotar como "Compilar: ..."`.

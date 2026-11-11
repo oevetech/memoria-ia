@@ -3,7 +3,7 @@ import fs from 'node:fs'; import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const R = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const w = (f, o) => { fs.mkdirSync(path.dirname(path.join(R, f)), { recursive: true }); fs.writeFileSync(path.join(R, f), JSON.stringify(o, null, 2) + '\n'); };
-const V = '1.1.0', REPO = 'https://github.com/oevetech/memoria-ia';
+const V = '1.2.0', REPO = 'https://github.com/oevetech/memoria-ia';
 const DESC = 'Memoria de projeto para IAs (Claude Code, Codex, Gemini/Antigravity): retomada curta, observacoes com o porque e busca barata. Sem servidor e sem IA extra.';
 // Lancador: usa o script do plugin (PLUGIN_ROOT/CLAUDE_PLUGIN_ROOT); se nao houver, ~/.memoria-ia/memoria.mjs.
 // Lancador sem brecha: 1) script do plugin (CLAUDE_PLUGIN_ROOT/PLUGIN_ROOT); 2) clone do Codex vindo do GitHub

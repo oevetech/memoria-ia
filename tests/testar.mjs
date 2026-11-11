@@ -197,6 +197,44 @@ ok(/guarda/.test(ha.PreToolUse[0].hooks[0].command) && /contexto/.test(ha.Sessio
 const versoes = ['.claude-plugin/marketplace.json', 'plugin/.claude-plugin/plugin.json', 'plugin/.codex-plugin/plugin.json'].map((f) => JSON.stringify(JSON.parse(ler(path.join(RAIZ, f)))).match(/"version":"([^"]+)"/)[1]);
 ok(versoes.every((v) => v === ler(SCRIPT).match(/const VERSAO = '([^']+)'/)[1]), `versoes iguais em todos os manifestos (${versoes.join(', ')})`);
 
+
+// ---------------------------------------------------------------- cerebro central (1.2)
+{
+  const CER = path.join(TMP, 'cerebro');
+  const envC = { MEMORIA_CEREBRO: '' };   // usa o config.json do HOME falso
+  let rc = run(['cerebro', 'buscar', 'x'], { cwd: proj, extraEnv: envC });
+  ok(/nao configurado/.test(rc.stdout), 'cerebro: sem config avisa como iniciar');
+  rc = run(['cerebro', 'iniciar', CER], { extraEnv: envC });
+  ok(fs.existsSync(path.join(CER, 'INDICE.md')) && fs.existsSync(path.join(CER, 'solucoes')), 'cerebro iniciar cria INDICE e solucoes/');
+  ok(JSON.parse(ler(path.join(HOME_FAKE, '.memoria-ia', 'config.json'))).cerebro === CER, 'cerebro iniciar grava a pasta no config');
+  rc = run(['--ia', 'claude', 'cerebro', 'anotar', 'AND', 'SDK location not found. Define a valid SDK location with sdk.dir', 'local.properties sem sdk.dir',
+    'criar local.properties com sdk.dir=C:\\...\\android-build\\sdk', 'gradle,sdk'], { cwd: proj, extraEnv: envC });
+  ok(/E-AND-0001 anotado/.test(rc.stdout), 'anotar gera codigo E-AND-0001');
+  const card = ler(path.join(CER, 'solucoes', 'E-AND-0001.md'));
+  ok(/## Solucao/.test(card) && /proj \(Claude\)/.test(card), 'card completo com projeto e IA');
+  rc = run(['cerebro', 'anotar', 'ESP', 'Brownout detector was triggered', 'fonte fraca no Wi-Fi', 'capacitor 470uF + fonte 2A'], { cwd: proj, extraEnv: envC });
+  ok(/E-ESP-0001/.test(rc.stdout), 'numeracao separada por area');
+  rc = run(['cerebro', 'buscar', 'FAILURE: SDK location not found while building app'], { cwd: proj, extraEnv: envC });
+  ok(/^E-AND-0001/.test(rc.stdout) && !/E-ESP/.test(rc.stdout), 'buscar acha pelo texto do erro e nao traz o resto');
+  ok(rc.stdout.split('\n').length <= 7, 'buscar imprime poucas linhas');
+  rc = run(['cerebro', 'buscar', 'tela azul impressora'], { cwd: proj, extraEnv: envC });
+  ok(/nada parecido/.test(rc.stdout), 'buscar sem resultado diz que nao achou');
+  rc = run(['cerebro', 'anotar', 'AND', 'SDK location not found', 'outra causa', 'outra solucao', 'sdk'], { cwd: proj, extraEnv: envC });
+  ok(rc.status === 3 && /somar E-AND-0001/.test(rc.stdout), 'anotar duplicado sugere somar');
+  const outro = path.join(TMP, 'app2'); fs.mkdirSync(outro);
+  rc = run(['cerebro', 'somar', 'E-AND-0001', 'mesmo erro no app2'], { cwd: outro, extraEnv: envC });
+  ok(/proj,app2/.test(ler(path.join(CER, 'INDICE.md'))) && /mesmo erro no app2/.test(ler(path.join(CER, 'solucoes', 'E-AND-0001.md'))), 'somar acrescenta projeto e ocorrencia');
+  rc = run(['cerebro', 'anotar', 'GIT', 'push recusado', 'token', 'usar ghp_abcdefghijklmnopqrstuvwxyz1234'], { cwd: proj, extraEnv: envC });
+  ok(rc.status === 1 && /Recusado/.test(rc.stdout), 'anotar recusa texto com token');
+  rc = run(['cerebro', 'anotar', 'XYZ', 'a', 'b', 'c'], { cwd: proj, extraEnv: envC });
+  ok(/Area desconhecida/.test(rc.stdout), 'area invalida recusada');
+  ok(/1\. SDK|SDK location/.test(run(['cerebro', 'ver', 'e-and-0001'], { extraEnv: envC }).stdout), 'ver aceita minusculas');
+  j = json(run(['--ia', 'claude', 'contexto'], { input: JSON.stringify({ cwd: proj, session_id: 'c1' }), extraEnv: envC }));
+  ok(/Cerebro central \(2 solucoes/.test(j?.hookSpecificOutput?.additionalContext || ''), 'retomada traz 1 linha do cerebro');
+  ok(/projeto: .*proj/.test(run(['status', proj], { cwd: TMP }).stdout), 'status aceita a pasta do projeto');
+  ok(/projeto: .*proj/.test(run(['--pasta', proj, 'status'], { cwd: TMP }).stdout), '--pasta roda como se estivesse no projeto');
+}
+
 function secaoDe(texto, titulo) { const m = texto.match(new RegExp(`## ${titulo}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |$)`)); return m ? m[1] : ''; }
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(`memoria-ia: ${total - falhas}/${total} testes OK`);

@@ -56,6 +56,28 @@ Só uma IA: `node instalar.mjs --so claude` (ou `codex`, `agy`). Desfazer: `node
 
 Depois de instalar, reinicie a IA. No Codex, aceite confiar nos ganchos se ele perguntar.
 
+## Cérebro central (1.2): erros e soluções de TODOS os projetos
+
+A memória de cada projeto guarda o andamento *daquele* projeto. O **cérebro** é uma pasta única, fora de todos os projetos,
+onde qualquer IA (Claude, Codex, Gemini) anota um erro resolvido e qualquer outra IA, em qualquer projeto, encontra a solução
+antes de gastar tempo pesquisando de novo.
+
+```bash
+memoria cerebro iniciar "G:/projetos_claude/cerebro-ia"     # uma vez (grava ~/.memoria-ia/config.json)
+memoria cerebro buscar "SDK location not found"             # 5 linhas mais parecidas (~150 tokens)
+memoria cerebro ver E-AND-0001                              # card completo
+memoria cerebro anotar AND "<erro exato>" "<causa>" "<solucao>" ["tags"] ["o que NAO funcionou"]
+memoria cerebro somar E-AND-0001 "aconteceu também no app X"
+```
+
+- **Barato:** a IA nunca lê o cérebro inteiro. `INDICE.md` tem 1 linha por solução; a busca pontua as linhas (palavras raras
+  valem mais + trecho exato) e mostra só as 5 melhores; o card (`solucoes/<ID>.md`) abre só pelo código.
+- **Código do erro:** `E-<ÁREA>-NNNN` — AND (Android), ESP, WIN, WEB, PY, NODE, GIT, IA, HA, CPP, GEN.
+- **Sem duplicata:** se já existe algo parecido, o `anotar` recusa e sugere `somar` (`--forcar` se for outro problema).
+- **Sem segredo:** texto com cara de token/chave é recusado.
+- **Automático:** a retomada de toda sessão ganha 1 linha lembrando de buscar no cérebro antes de pesquisar.
+- Pasta alternativa por variável: `MEMORIA_CEREBRO=<pasta>`.
+
 ## Usar
 
 Num projeto novo, peça à IA: *"instale a memoria-ia aqui"* (ou rode `node ~/.memoria-ia/memoria.mjs instalar`). Depois preencha **Agora**, **Próximo** e **Como trabalhar aqui** no `CONTINUAR_AQUI.md`.
