@@ -237,6 +237,41 @@ ok(versoes.every((v) => v === ler(SCRIPT).match(/const VERSAO = '([^']+)'/)[1]),
   ok(/projeto: .*proj/.test(run(['--pasta', proj, 'status'], { cwd: TMP }).stdout), '--pasta roda como se estivesse no projeto');
 }
 
+// ---------------------------------------------------------------- 1.3: trava robusta
+{
+  const p = path.join(TMP, 'trava13'); fs.mkdirSync(path.join(p, 'src'), { recursive: true });
+  run(['instalar', p, 'trava13']);
+  ok(ler(path.join(p, '.gitignore')).includes('.memoria-ia-trava.json'), '1.3: instalar sem .git ja protege a trava no .gitignore');
+  const T = path.join(p, '.memoria-ia-trava.json');
+  const g = (ia, nome, ent) => json(run(['--ia', ia, 'guarda'], { input: JSON.stringify({ cwd: p, tool_name: nome, tool_input: ent }) }));
+  const edit = (ia) => g(ia, 'Edit', { file_path: path.join(p, 'src', 'a.js') });
+  fs.writeFileSync(T, '{quebrado');
+  ok(edit('claude')?.decision === 'block' && ler(T) === '{quebrado', '1.3: trava corrompida bloqueia edicao e nao e sobrescrita');
+  ok(/ILEGIVEL/.test(run(['trava', 'ver'], { cwd: p }).stdout), '1.3: trava ver mostra ILEGIVEL');
+  ok(/LIVRE \(era de/.test(run(['trava', 'liberar', '--forcar'], { cwd: p }).stdout) && !fs.existsSync(T), '1.3: usuario libera trava corrompida');
+  edit('claude');
+  ok(JSON.parse(ler(T)).dono === 'claude', '1.3: claude pega a trava');
+  ok(g('codex', 'PowerShell', { command: 'Remove-Item .memoria-ia-trava.json' })?.decision === 'block', '1.3: PowerShell nao apaga a trava de outra IA');
+  ok(g('codex', 'Bash', { command: 'echo x > src/a.js' })?.decision === 'block', '1.3: redirecionamento para arquivo bloqueado com trava de outra IA');
+  ok(g('codex', 'Bash', { command: "sed -i 's/a/b/' src/a.js" })?.decision === 'block', '1.3: sed -i bloqueado');
+  ok(g('codex', 'PowerShell', { command: 'Set-Content src/a.js "x"' })?.decision === 'block', '1.3: Set-Content bloqueado');
+  ok(g('codex', 'Bash', { command: 'git commit -am x' })?.decision === 'block', '1.3: git commit bloqueado');
+  ok(vazio(g('codex', 'Bash', { command: 'git status && git diff 2>&1 > /dev/null; ls -la; node --test' })), '1.3: leitura/testes continuam livres');
+  ok(vazio(g('codex', 'Bash', { command: 'node -e "[1].map(x => x * 2)"' })), '1.3: seta => nao conta como redirecionamento');
+  ok(vazio(g('claude', 'Bash', { command: 'echo x > src/a.js' })), '1.3: o dono da trava usa o shell normalmente');
+  const velha = new Date(Date.now() - 3 * 3600 * 1000).toISOString();
+  fs.writeFileSync(T, JSON.stringify({ dono: 'claude', tarefa: 'x', desde: velha, renovada: velha }));
+  ok(/VELHA/.test(run(['trava', 'ver'], { cwd: p }).stdout), '1.3: trava ver avisa trava velha');
+  ok(vazio(edit('codex')) && JSON.parse(ler(T)).dono === 'codex' && /Claude/.test(JSON.parse(ler(T)).assumida_de), '1.3: trava sem atividade ha 2h e assumida, com registro');
+  ok(edit('claude')?.decision === 'block', '1.3: dono antigo volta e e barrado (nao editam juntos)');
+  ok(run(['--ia', 'claude', 'trava', 'pegar', 'y'], { cwd: p, extraEnv: { MEMORIA_IA_TRAVA_VELHA_MIN: '0.0001' } }).status === 0, '1.3: prazo de trava velha configuravel');
+  fs.rmSync(T, { force: true });
+  fs.writeFileSync(T, JSON.stringify({ dono: 'centerneural', tarefa: 'tarefa 1', desde: new Date().toISOString(), renovada: new Date().toISOString() }));
+  ok(edit('claude')?.decision === 'block' && /CenterNeural/.test(run(['trava', 'ver'], { cwd: p }).stdout), '1.3: trava do CenterNeural bloqueia e aparece com nome');
+  fs.rmSync(T, { force: true });
+  ok(!fs.readdirSync(p).some((f) => f.endsWith('.tmp')), '1.3: gravacao atomica nao deixa temporarios');
+}
+
 function secaoDe(texto, titulo) { const m = texto.match(new RegExp(`## ${titulo}[^\\n]*\\n([\\s\\S]*?)(?=\\n## |$)`)); return m ? m[1] : ''; }
 fs.rmSync(TMP, { recursive: true, force: true });
 console.log(`memoria-ia: ${total - falhas}/${total} testes OK`);

@@ -25,7 +25,7 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
-const VERSAO = '1.2.1';
+const VERSAO = '1.3.0';
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const SCRIPT = path.join(AQUI, 'memoria.mjs');
 // kit ao lado do script (~/.memoria-ia/kit) ou na pasta do plugin (plugin/kit)
@@ -37,8 +37,17 @@ const LIMITE_LINHAS = 80;
 const TIPOS = ['bugfix', 'feature', 'perf', 'refactor', 'mudanca', 'decisao', 'descoberta', 'seguranca'];
 const ESTADO = path.join(os.homedir(), '.memoria-ia', 'estado.json');
 const LEMBRETE_INTERVALO_MS = 30 * 60 * 1000;
-const NOMES_IA = { claude: 'Claude', codex: 'Codex', agy: 'Gemini/Antigravity', texto: 'usuario' };
+const NOMES_IA = { claude: 'Claude', codex: 'Codex', agy: 'Gemini/Antigravity', centerneural: 'CenterNeural', texto: 'usuario' };
 const SEMPRE_INJETAR = ['sempre', 'agora', 'proximo', 'pendencias'];   // secoes da retomada curta, nesta ordem
+// Comando de shell que obviamente grava arquivos (redirecionamento para arquivo, sed -i, rm, Set-Content, git que muda a arvore...).
+// Heuristica: so e usada quando a trava e de OUTRA IA; leitura (ls, cat, git status/diff/log, testes) continua livre.
+const SHELL_GRAVA = new RegExp([
+  String.raw`(^|[^0-9&=\-<>])>{1,2}\s*(?![&>]|\/dev\/null|\$null|nul\b)\S`,
+  String.raw`\b(sed\s+(-[a-zA-Z]*i|--in-place)|perl\s+-[a-z]*i|tee|rm|rmdir|mv|cp|del|erase|rd|move|copy|xcopy|robocopy|mkdir|md|touch|truncate)\b`,
+  String.raw`\b(Set-Content|Add-Content|Out-File|New-Item|Remove-Item|Move-Item|Copy-Item|Rename-Item|Clear-Content|WriteAllText|WriteAllBytes)\b`,
+  String.raw`\bgit\s+(commit|checkout|switch|reset|merge|rebase|apply|am|stash|restore|clean|pull|cherry-pick|revert|rm|mv)\b`,
+  String.raw`\b(npm|pnpm|yarn)\s+(install|i|add|remove|uninstall|update|ci)\b`,
+].join('|'), 'i');
 const FERRAMENTAS_EDICAO = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'apply_patch', 'write_file', 'replace', 'edit_file',
   'write_to_file', 'replace_file_content', 'multi_replace_file_content', 'create_file']);
 
@@ -150,22 +159,52 @@ function avisoIntegridade() {
 
 // ------------------------------------------------------------------ trava (varias IAs, mesmos arquivos)
 const arqTrava = (r) => path.join(r, ARQ_TRAVA);
-function lerTrava(r) { try { return JSON.parse(ler(arqTrava(r))); } catch { return null; } }
-function gravarTrava(r, t) { fs.writeFileSync(arqTrava(r), JSON.stringify(t, null, 2) + '\n', 'utf8'); }
+// 1.3: trava ilegivel nao vira LIVRE (antes era sobrescrita pela proxima IA). Devolve { ilegivel: true }.
+function lerTrava(r) {
+  const f = arqTrava(r);
+  if (!existe(f)) return null;
+  try { const t = JSON.parse(ler(f)); if (t && typeof t === 'object' && typeof t.dono === 'string') return t; } catch { /* abaixo */ }
+  return { ilegivel: true, dono: '?' };
+}
+// 1.3: gravacao atomica (temporario + rename); criacao com 'wx' para duas IAs nao pegarem a trava ao mesmo tempo.
+function gravarTrava(r, t) {
+  const f = arqTrava(r), tmp = `${f}.${process.pid}.${Date.now()}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(t, null, 2) + '\n', 'utf8');
+  try { fs.renameSync(tmp, f); } catch (err) { fs.rmSync(tmp, { force: true }); throw err; }
+}
+function criarTrava(r, t) {
+  try { fs.writeFileSync(arqTrava(r), JSON.stringify(t, null, 2) + '\n', { encoding: 'utf8', flag: 'wx' }); return true; }
+  catch (err) { if (err.code === 'EEXIST') return false; throw err; }
+}
+// 1.3: trava sem renovacao ha muito tempo (IA caiu, sessao fechada sem "sessao") deixa de prender o projeto para sempre.
+const TRAVA_VELHA_MS = (Number(process.env.MEMORIA_IA_TRAVA_VELHA_MIN) || 120) * 60 * 1000;
+const travaVelha = (t) => !!t && !t.ilegivel && Date.now() - new Date(t.renovada || t.desde).getTime() > TRAVA_VELHA_MS;
 const nomeIA = (ia) => NOMES_IA[ia] || ia;
-function textoTrava(t) { return `${nomeIA(t.dono)} desde ${quando(t.desde)}${t.tarefa ? ` (${t.tarefa})` : ''}`; }
+function textoTrava(t) { return t.ilegivel ? 'trava ILEGIVEL (arquivo corrompido)' : `${nomeIA(t.dono)} desde ${quando(t.desde)}${t.tarefa ? ` (${t.tarefa})` : ''}`; }
 function mensagemBloqueio(t) {
   return `TRAVA memoria-ia: este projeto esta sendo editado por ${textoTrava(t)}. NAO edite nada. ` +
     `Avise o usuario que existe essa trava; so ele libera (no terminal dele): ${cmd('texto')} trava liberar --forcar`;
 }
+// Assume trava VELHA de outra IA, registrando de quem era. Devolve true se assumiu.
+function assumirVelha(r, t, tarefa) {
+  if (!travaVelha(t) || t.dono === IA) return false;
+  const agora = new Date().toISOString();
+  gravarTrava(r, { dono: IA, tarefa, desde: agora, renovada: agora, assumida_de: `${nomeIA(t.dono)} (sem atividade desde ${quando(t.renovada || t.desde)})` });
+  return true;
+}
 function trava([acao, ...resto]) {
   const r = raizOuSair(), t = lerTrava(r);
-  if (!acao || acao === 'ver') return console.log(t ? `TRAVADO por ${textoTrava(t)}; ultima edicao ${quando(t.renovada || t.desde)}` : 'LIVRE');
+  if (!acao || acao === 'ver') return console.log(t ? `TRAVADO por ${textoTrava(t)}; ultima edicao ${t.ilegivel ? '?' : quando(t.renovada || t.desde)}${travaVelha(t) ? ' (VELHA: outra IA assume na proxima edicao)' : ''}` : 'LIVRE');
   if (acao === 'pegar') {
     if (IA === 'texto') sair('Diga quem pega a trava: --ia <claude|codex|agy>');
-    if (t && t.dono !== IA) sair(mensagemBloqueio(t), 3);
-    const agora = new Date().toISOString();
-    gravarTrava(r, { dono: IA, tarefa: limpo(resto.join(' ')) || (t && t.tarefa) || '', desde: t ? t.desde : agora, renovada: agora });
+    const agora = new Date().toISOString(), tarefa = limpo(resto.join(' '));
+    if (!t) {
+      if (!criarTrava(r, { dono: IA, tarefa, desde: agora, renovada: agora })) sair(mensagemBloqueio(lerTrava(r) || { dono: '?' }), 3);
+      return console.log(`Trava com ${nomeIA(IA)}.`);
+    }
+    if (assumirVelha(r, t, tarefa)) return console.log(`Trava velha de ${nomeIA(t.dono)} assumida por ${nomeIA(IA)}.`);
+    if (t.dono !== IA) sair(mensagemBloqueio(t), 3);
+    gravarTrava(r, { ...t, tarefa: tarefa || t.tarefa || '', renovada: agora });
     return console.log(`Trava com ${nomeIA(IA)}.`);
   }
   if (acao === 'liberar') {
@@ -320,7 +359,8 @@ function instalar([destino, nome]) {
     console.log(`criado: ${i}`);
   }
   const gi = path.join(d, '.gitignore');
-  if (existe(path.join(d, '.git')) && !ler(gi).includes(ARQ_TRAVA)) { fs.appendFileSync(gi, `${ler(gi) && !ler(gi).endsWith('\n') ? '\n' : ''}${ARQ_TRAVA}\n`, 'utf8'); console.log(`.gitignore: ${ARQ_TRAVA}`); }
+  // 1.3: mesmo sem .git ainda (git init depois da memoria) a trava nunca deve ir para o repositorio.
+  if (!ler(gi).includes(ARQ_TRAVA)) { fs.appendFileSync(gi, `${ler(gi) && !ler(gi).endsWith('\n') ? '\n' : ''}${ARQ_TRAVA}\n`, 'utf8'); console.log(`.gitignore: ${ARQ_TRAVA}`); }
   console.log(`Pronto. Preencha com: ${cmd()} agora "..." | proximo "..." | anotar como "..."`);
 }
 
@@ -398,25 +438,36 @@ async function guarda() {
   const e = await lerStdin();
   const nome = e.tool_name || e.toolCall?.name || '', entrada = e.tool_input || e.toolCall?.args || {};
   const base = cwdDoGancho(e);
-  const ehShell = /^(Bash|run_command|shell|exec_command|local_shell)$/i.test(nome);
+  // 1.3: PowerShell (Claude Code no Windows), cmd e o shell do Gemini CLI tambem sao shell.
+  const ehShell = /^(Bash|PowerShell|pwsh|cmd|run_command|run_shell_command|shell|exec_command|local_shell|terminal)$/i.test(nome);
   decisaoLivreAgy = !nome || ehShell || FERRAMENTAS_EDICAO.has(nome) ? 'ask' : 'allow';
   if (ehShell) {
     const c = String(entrada.command || entrada.CommandLine || entrada.cmd || (Array.isArray(entrada.command) ? entrada.command.join(' ') : ''));
     const r = acharRaiz(base), t = r && lerTrava(r);
-    if (t && t.dono !== IA && /memoria\.mjs[\s\S]*\btrava\b[\s\S]*\b(liberar|pegar)\b/i.test(c)) return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
-    if (t && t.dono !== IA && new RegExp(ARQ_TRAVA.replace(/\./g, '\\.')).test(c)) return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
+    const deOutra = t && t.dono !== IA && !travaVelha(t);
+    if (deOutra && /memoria\.mjs[\s\S]*\btrava\b[\s\S]*\b(liberar|pegar)\b/i.test(c)) return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
+    if (deOutra && new RegExp(ARQ_TRAVA.replace(/\./g, '\\.')).test(c)) return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
+    // 1.3: com a trava de OUTRA IA, comandos que claramente gravam arquivos tambem param (antes o shell passava direto).
+    if (deOutra && SHELL_GRAVA.test(c)) return responder(IA, 'PreToolUse', `${mensagemBloqueio(t)} (Comando de shell que altera arquivos bloqueado; leitura continua liberada.)`, true);
     return responder(IA, 'PreToolUse', '', false);
   }
   if (!FERRAMENTAS_EDICAO.has(nome)) return responder(IA, 'PreToolUse', '', false);
   const alvo = caminhoDaFerramenta(entrada);
   const r = acharRaiz(alvo ? path.dirname(path.resolve(base, alvo)) : base);
   if (!r || IA === 'texto') return responder(IA, 'PreToolUse', '', false);
-  const t = lerTrava(r), agora = new Date().toISOString();
-  if (!t) { gravarTrava(r, { dono: IA, tarefa: `automatica: 1a edicao (${alvo ? path.basename(alvo) : nome})`, desde: agora, renovada: agora }); return responder(IA, 'PreToolUse', '', false); }
+  const t = lerTrava(r), agora = new Date().toISOString(), tarefa = `automatica: 1a edicao (${alvo ? path.basename(alvo) : nome})`;
+  if (!t) {
+    if (criarTrava(r, { dono: IA, tarefa, desde: agora, renovada: agora })) return responder(IA, 'PreToolUse', '', false);
+    const ganhou = lerTrava(r);   // outra IA criou no mesmo instante
+    return ganhou && ganhou.dono === IA ? responder(IA, 'PreToolUse', '', false) : responder(IA, 'PreToolUse', mensagemBloqueio(ganhou || { dono: '?' }), true);
+  }
+  // 1.3: trava ilegivel bloqueia edicao (antes virava LIVRE e era sobrescrita).
+  if (t.ilegivel) return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
   if (t.dono === IA) {
     if (Date.now() - new Date(t.renovada || t.desde).getTime() > 60000) gravarTrava(r, { ...t, renovada: agora });
     return responder(IA, 'PreToolUse', '', false);
   }
+  if (assumirVelha(r, t, tarefa)) return responder(IA, 'PreToolUse', '', false);
   return responder(IA, 'PreToolUse', mensagemBloqueio(t), true);
 }
 function lerEstado() { try { return JSON.parse(ler(ESTADO)) || {}; } catch { return {}; } }
