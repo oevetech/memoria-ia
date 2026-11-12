@@ -81,7 +81,10 @@ function claude() {
   if (!r.ok && /already|ja existe|exists/i.test(r.saida)) r = rodar('claude', ['plugin', 'marketplace', 'update', NOME]);
   if (!r.ok) { log(`- Claude Code: falhou ao adicionar o marketplace:\n  ${r.saida.split('\n').slice(-3).join('\n  ')}`); return; }
   r = rodar('claude', ['plugin', 'install', `${NOME}@${NOME}`, '--scope', 'user']);
-  log(r.ok || /already|instalad/i.test(r.saida) ? '- Claude Code: plugin instalado (vale para todos os projetos; reinicie o Claude Code)'
+  // 1.3.1: "install" nao troca um plugin ja instalado (o Claude ficou na 1.0.0 com a 1.2.1 baixada). Sempre atualiza.
+  const u = rodar('claude', ['plugin', 'update', `${NOME}@${NOME}`, '--scope', 'user']);
+  const versao = (u.saida.match(/to (\d+\.\d+\.\d+)/) || [])[1];
+  log(r.ok || u.ok || /already|instalad/i.test(r.saida) ? `- Claude Code: plugin instalado${versao ? ` e atualizado para ${versao}` : ' (versao atual)'} (vale para todos os projetos; reinicie o Claude Code)`
     : `- Claude Code: falhou ao instalar o plugin:\n  ${r.saida.split('\n').slice(-3).join('\n  ')}`);
 }
 
@@ -106,6 +109,8 @@ function codex() {
   let r = rodar('codex', ['plugin', 'marketplace', 'add', FONTE]);
   if (!r.ok && /already/i.test(r.saida)) { rodar('codex', ['plugin', 'marketplace', 'remove', NOME]); r = rodar('codex', ['plugin', 'marketplace', 'add', FONTE]); }
   if (!r.ok) { log(`- Codex: falhou ao adicionar o marketplace:\n  ${r.saida.split('\n').slice(-3).join('\n  ')}`); return; }
+  // 1.3.1: o clone do marketplace nao se atualiza sozinho (o Codex ficou na 1.2.1); puxa a versao nova antes do add.
+  rodar('codex', ['plugin', 'marketplace', 'upgrade', NOME]);
   r = rodar('codex', ['plugin', 'add', `${NOME}@${NOME}`]);
   const cfg = path.join(dir, 'config.toml');
   backup(cfg);
